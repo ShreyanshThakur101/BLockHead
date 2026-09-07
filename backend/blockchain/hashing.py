@@ -37,22 +37,17 @@ def build_merkle_root(transactions: List[Transaction]) -> str:
         return ""
 
     # Ensure transaction IDs exist
-    hashes = []
-    for tx in transactions:
-        tx_id = tx.tx_id or calculate_transaction_id(tx)
-        hashes.append(tx_id)
+    hashes = [tx.tx_id or calculate_transaction_id(tx) for tx in transactions]
 
     # Build Merkle tree
     while len(hashes) > 1:
-        # If odd number of hashes, duplicate the last hash to complete the pair
         if len(hashes) % 2 != 0:
             hashes.append(hashes[-1])
 
-        next_level = []
-        for i in range(0, len(hashes), 2):
-            combined = hashes[i] + hashes[i + 1]
-            next_level.append(calculate_sha256(combined))
-        hashes = next_level
+        hashes = [
+            calculate_sha256(hashes[i] + hashes[i + 1])
+            for i in range(0, len(hashes), 2)
+        ]
 
     return hashes[0]
 

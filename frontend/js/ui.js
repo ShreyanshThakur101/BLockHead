@@ -2,10 +2,21 @@
    DOM UI MANAGER & EVENT CONTROLLERS (Proof of Stake)
    ========================================================================== */
 
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
 class UiManager {
     constructor() {
         this.selectedBlock = null;
         this.selectedBlockIndex = null;
+        this.onSlashValidator = null;
         
         // Element References
         this.elements = {
@@ -70,6 +81,19 @@ class UiManager {
         this.elements.btnCloseMempool.addEventListener('click', () => this.closeMempoolModal());
         this.elements.btnManageValidators.addEventListener('click', () => this.openValidatorsModal());
         this.elements.btnCloseValidators.addEventListener('click', () => this.closeValidatorsModal());
+
+        // Event delegation for validator slash buttons
+        if (this.elements.validatorsList) {
+            this.elements.validatorsList.addEventListener('click', (e) => {
+                const btn = e.target.closest('.btn-slash');
+                if (btn && this.onSlashValidator) {
+                    const name = btn.getAttribute('data-name');
+                    if (name) {
+                        this.onSlashValidator(name);
+                    }
+                }
+            });
+        }
     }
 
     updateHealthBadge(validationResult) {
@@ -142,23 +166,27 @@ class UiManager {
     }
 
     renderMempoolList(transactions) {
-        this.elements.mempoolCount.textContent = transactions.length;
-        this.elements.mempoolQueueCount.textContent = transactions.length;
+        const txList = Array.isArray(transactions) ? transactions : [];
+        this.elements.mempoolCount.textContent = txList.length;
+        this.elements.mempoolQueueCount.textContent = txList.length;
 
         const list = this.elements.mempoolList;
         list.innerHTML = '';
 
-        if (!transactions || transactions.length === 0) {
+        if (txList.length === 0) {
             list.innerHTML = '<div class="empty-msg">No pending transactions in mempool.</div>';
             return;
         }
 
-        transactions.forEach(tx => {
+        txList.forEach(tx => {
             const div = document.createElement('div');
             div.className = 'tx-item';
+            const safeSender = escapeHtml(tx.sender);
+            const safeRecipient = escapeHtml(tx.recipient);
+            const safeAmount = Number(tx.amount) || 0;
             div.innerHTML = `
-                <div><strong>${tx.sender}</strong> ➔ <strong>${tx.recipient}</strong></div>
-                <div style="color: var(--accent-cyan); font-weight: 600;">${tx.amount} Coins</div>
+                <div><strong>${safeSender}</strong> ➔ <strong>${safeRecipient}</strong></div>
+                <div style="color: var(--accent-cyan); font-weight: 600;">${safeAmount} Coins</div>
             `;
             list.appendChild(div);
         });
@@ -173,40 +201,33 @@ class UiManager {
     }
 
     renderValidatorsList(validators) {
-        this.elements.validatorCount.textContent = validators.length;
+        const valList = Array.isArray(validators) ? validators : [];
+        this.elements.validatorCount.textContent = valList.length;
         const list = this.elements.validatorsList;
         list.innerHTML = '';
 
-        if (!validators || validators.length === 0) {
+        if (valList.length === 0) {
             list.innerHTML = '<div class="empty-msg">No validators registered.</div>';
             return;
         }
 
-        const totalStake = validators.reduce((acc, v) => acc + (v.is_slashed ? 0 : v.stake), 0);
+        const totalStake = valList.reduce((acc, v) => acc + (v.is_slashed ? 0 : (Number(v.stake) || 0)), 0);
 
-        validators.forEach(v => {
-            const prob = totalStake > 0 && !v.is_slashed ? ((v.stake / totalStake) * 100).toFixed(1) : 0;
+        valList.forEach(v => {
+            const stakeNum = Number(v.stake) || 0;
+            const prob = totalStake > 0 && !v.is_slashed ? ((stakeNum / totalStake) * 100).toFixed(1) : '0.0';
+            const safeName = escapeHtml(v.name);
             const div = document.createElement('div');
             div.className = 'val-item';
             div.innerHTML = `
                 <div>
-                    <strong>${v.name}</strong> 
+                    <strong>${safeName}</strong> 
                     ${v.is_slashed ? '<span style="color:var(--accent-rose);">(SLASHED)</span>' : ''}
                 </div>
-                <div>Stake: <strong>${v.stake}</strong> (${prob}%)</div>
-                ${!v.is_slashed ? `<button class="btn btn-danger btn-slash" data-name="${v.name}" style="padding:4px 8px; font-size:11px;">Slash</button>` : ''}
+                <div>Stake: <strong>${stakeNum}</strong> (${prob}%)</div>
+                ${!v.is_slashed ? `<button class="btn btn-danger btn-slash" data-name="${safeName}" style="padding:4px 8px; font-size:11px;">Slash</button>` : ''}
             `;
             list.appendChild(div);
-        });
-
-        // Bind slash buttons
-        list.querySelectorAll('.btn-slash').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const name = e.target.getAttribute('data-name');
-                if (this.onSlashValidator) {
-                    this.onSlashValidator(name);
-                }
-            });
         });
     }
 }

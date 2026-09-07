@@ -4,7 +4,7 @@ Ensures clean, typed, and serializable data structures for blocks, transactions,
 and validation results.
 """
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 import time
 from typing import List, Optional, Dict, Any
 

@@ -15,22 +15,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Helper to refresh chain data from API
     async function syncChainState() {
         try {
-            const response = await api.getChain();
-            if (response.success) {
-                currentChainState = response.data;
+            const [chainRes, mempoolRes] = await Promise.all([
+                api.getChain(),
+                api.getMempool()
+            ]);
+
+            if (chainRes && chainRes.success) {
+                currentChainState = chainRes.data;
                 renderer.setChainData(currentChainState.blocks, currentChainState.validation);
                 ui.updateHealthBadge(currentChainState.validation);
                 
-                // Update Mempool & Validators UI
-                const mempoolRes = await api.getMempool();
-                if (mempoolRes.success) {
-                    ui.renderMempoolList(mempoolRes.pending_transactions);
+                // Active validators are directly provided in chain data
+                if (currentChainState.validators) {
+                    ui.renderValidatorsList(currentChainState.validators);
                 }
+            }
 
-                const valRes = await api.getValidators();
-                if (valRes.success) {
-                    ui.renderValidatorsList(valRes.validators);
-                }
+            if (mempoolRes && mempoolRes.success) {
+                ui.renderMempoolList(mempoolRes.pending_transactions);
             }
         } catch (err) {
             console.error('Failed to sync chain state (server offline?):', err);
@@ -48,27 +50,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     api.on('chain_tampered', (data) => {
         syncChainState();
-        if (ui.selectedBlockIndex !== null) {
+        if (ui.selectedBlockIndex !== null && data.chain_state && data.chain_state.blocks) {
             const updatedBlock = data.chain_state.blocks[ui.selectedBlockIndex];
-            ui.openInspector(updatedBlock, ui.selectedBlockIndex, data.validation);
+            if (updatedBlock) {
+                ui.openInspector(updatedBlock, ui.selectedBlockIndex, data.validation);
+            }
         }
     });
 
     api.on('block_resealed', (data) => {
         ui.hideMiningLoader();
         syncChainState();
-        if (ui.selectedBlockIndex !== null) {
+        if (ui.selectedBlockIndex !== null && data.chain_state && data.chain_state.blocks) {
             const updatedBlock = data.chain_state.blocks[ui.selectedBlockIndex];
-            ui.openInspector(updatedBlock, ui.selectedBlockIndex, data.validation);
-        }
-    });
-
-    api.on('block_remined', (data) => {
-        ui.hideMiningLoader();
-        syncChainState();
-        if (ui.selectedBlockIndex !== null) {
-            const updatedBlock = data.chain_state.blocks[ui.selectedBlockIndex];
-            ui.openInspector(updatedBlock, ui.selectedBlockIndex, data.validation);
+            if (updatedBlock) {
+                ui.openInspector(updatedBlock, ui.selectedBlockIndex, data.validation);
+            }
         }
     });
 

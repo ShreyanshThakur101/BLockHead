@@ -21,26 +21,18 @@ class ProofOfStakeStrategy:
     def select_validator(self, validators: Dict[str, Validator]) -> str:
         """
         Weighted random selection (lottery) based on active validator stake.
+        Uses Python's optimized C-level random.choices implementation.
         """
-        active_validators = {
-            name: v for name, v in validators.items()
+        active_validators = [
+            (name, v.stake) for name, v in validators.items()
             if v.stake > 0 and not v.is_slashed
-        }
+        ]
 
         if not active_validators:
             raise ValueError("No active, non-slashed validators available with positive stake.")
 
-        total_stake = sum(v.stake for v in active_validators.values())
-        pick = random.uniform(0, total_stake)
-
-        current = 0.0
-        for name, v in active_validators.items():
-            current += v.stake
-            if pick <= current:
-                return name
-
-        # Fallback safety return last active validator
-        return list(active_validators.keys())[-1]
+        names, weights = zip(*active_validators)
+        return random.choices(names, weights=weights, k=1)[0]
 
     def execute(
         self,
@@ -73,22 +65,26 @@ class ProofOfStakeStrategy:
         Validate block according to Proof of Stake consensus rules:
         1. Block's stored hash must match freshly computed SHA-256 hash.
         2. Block must have an assigned validator.
-        3. Validator must exist in validator pool and not be slashed.
+        3. For non-genesis blocks, validator must exist in registry, not be slashed, and have positive stake.
         """
         computed = calculate_block_hash(block)
         if computed != block.hash:
             return False
 
-        # In PoS, every block must be signed/validated by a known validator
         if not block.validator:
             return False
 
-        # If validator registry is provided, check validator legitimacy
-        if validators and block.validator in validators:
-            v = validators[block.validator]
-            if v.is_slashed:
+        # Genesis block (Index 0) has special genesis authority
+        if block.index == 0:
+            return True
+
+        # If validator registry is provided, enforce that validator exists,
+        # is not slashed, and holds active stake > 0
+        if validators is not None:
+            if block.validator not in validators:
                 return False
-            if v.stake <= 0:
+            v = validators[block.validator]
+            if v.is_slashed or v.stake <= 0:
                 return False
 
         return True

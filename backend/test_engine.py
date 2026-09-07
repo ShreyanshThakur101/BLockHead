@@ -94,8 +94,64 @@ def test_tamper_and_reseal():
     print("[OK] Full chain repair verified.")
 
 
+def test_security_unregistered_validator_rejection():
+    print("\n--- 4. Testing Security: Unregistered & Slashed Validator Rejection ---")
+    chain = Blockchain()
+    b1 = chain.add_block(data="Legitimate block")
+    assert chain.is_chain_valid().is_valid
+
+    # Attempt to forge a block with an untrusted, unregistered validator
+    b1.validator = "Hacker_Node_666"
+    from backend.blockchain.hashing import calculate_block_hash
+    b1.hash = calculate_block_hash(b1)  # Recalculate hash so hash matches
+
+    val = chain.is_chain_valid()
+    assert not val.is_valid, "Chain must reject blocks created by unregistered validators!"
+    assert val.broken_at_index == 1
+    print(f"[OK] Security Check Passed: Unregistered validator '{b1.validator}' successfully rejected: {val.reason}")
+
+
+def test_input_validation_and_edge_cases():
+    print("\n--- 5. Testing Input Validation & Edge Cases ---")
+    chain = Blockchain()
+
+    # Test invalid validator inputs
+    try:
+        chain.add_validator("", 10.0)
+        assert False, "Empty validator name should be rejected"
+    except ValueError:
+        pass
+
+    try:
+        chain.add_validator("Valid_Name", float("nan"))
+        assert False, "NaN stake should be rejected"
+    except ValueError:
+        pass
+
+    try:
+        chain.add_validator("Valid_Name", -5.0)
+        assert False, "Negative stake should be rejected"
+    except ValueError:
+        pass
+
+    # Test invalid transaction inputs
+    try:
+        chain.mempool.add_transaction(Transaction(sender="", recipient="Bob", amount=10.0))
+        assert False, "Empty sender should be rejected"
+    except ValueError:
+        pass
+
+    try:
+        chain.mempool.add_transaction(Transaction(sender="Alice", recipient="Bob", amount=float("inf")))
+        assert False, "Infinite amount should be rejected"
+    except ValueError:
+        pass
+
+    print("[OK] All invalid and malicious edge-case inputs successfully rejected.")
+
+
 def test_mempool_and_merkle():
-    print("\n--- 4. Testing Mempool & Merkle Trees in PoS ---")
+    print("\n--- 6. Testing Mempool & Merkle Trees in PoS ---")
     chain = Blockchain()
 
     tx1 = Transaction(sender="Alice", recipient="Bob", amount=25.0)
@@ -112,9 +168,36 @@ def test_mempool_and_merkle():
     print("[OK] Mempool & Merkle Root integration verified.")
 
 
+def test_concurrency_thread_safety():
+    print("\n--- 7. Testing Concurrency & Thread Safety ---")
+    import concurrent.futures
+
+    chain = Blockchain()
+    num_threads = 8
+    blocks_per_thread = 5
+
+    def add_blocks():
+        for i in range(blocks_per_thread):
+            chain.add_block(data=f"Thread Block {i}")
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
+        futures = [executor.submit(add_blocks) for _ in range(num_threads)]
+        for f in concurrent.futures.as_completed(futures):
+            f.result()
+
+    expected_blocks = 1 + (num_threads * blocks_per_thread)
+    assert len(chain.blocks) == expected_blocks, f"Expected {expected_blocks} blocks, got {len(chain.blocks)}"
+    val = chain.is_chain_valid()
+    assert val.is_valid, f"Concurrent chain corrupted! {val.reason}"
+    print(f"[OK] Concurrent generation of {expected_blocks} blocks across {num_threads} threads was 100% race-free and valid.")
+
+
 if __name__ == "__main__":
     test_genesis_and_pos_block_creation()
     test_validator_pool_and_slashing()
     test_tamper_and_reseal()
+    test_security_unregistered_validator_rejection()
+    test_input_validation_and_edge_cases()
     test_mempool_and_merkle()
-    print("\n[ALL PROOF OF STAKE TESTS PASSED SUCCESSFULLY!]")
+    test_concurrency_thread_safety()
+    print("\n[ALL AUDIT & SECURITY TESTS PASSED WITH 100% SUCCESS!]")

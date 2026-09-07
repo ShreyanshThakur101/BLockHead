@@ -9,6 +9,7 @@ from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 import sys
 import os
+import math
 
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -17,7 +18,7 @@ from backend.blockchain import Blockchain, Transaction
 
 frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend"))
 app = Flask(__name__, static_folder=frontend_dir, static_url_path="")
-app.config['SECRET_KEY'] = 'blockchain_sim_secret_key_2026'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'blockchain_sim_secret_key_2026')
 CORS(app, resources={r"/*": {"origins": "*"}})
 socketio = SocketIO(app, cors_allowed_origins="*")
 
@@ -29,6 +30,16 @@ blockchain_engine = Blockchain()
 def index():
     """Serve the 2D visualizer web frontend."""
     return send_from_directory(app.static_folder, 'index.html')
+
+
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Return health status of the blockchain simulation server."""
+    return jsonify({
+        "success": True,
+        "status": "healthy",
+        "service": "blockchain-pos-simulator"
+    }), 200
 
 
 @app.route('/api/chain', methods=['GET'])
@@ -44,9 +55,11 @@ def get_chain():
 @app.route('/api/forge', methods=['POST'])
 def forge_block():
     """Propose and seal a new block using Proof of Stake validator selection."""
-    req = request.get_json() or {}
-    data_payload = req.get("data", "")
-    validator_name = req.get("validator", None)
+    req = request.get_json(silent=True) or {}
+    data_payload = str(req.get("data", ""))[:50000]  # Cap payload size for safety
+    validator_name = req.get("validator")
+    if validator_name:
+        validator_name = str(validator_name).strip() or None
 
     try:
         new_block = blockchain_engine.add_block(
@@ -69,8 +82,8 @@ def forge_block():
 @app.route('/api/tamper/<int:index>', methods=['POST'])
 def tamper_block(index: int):
     """Simulate cyber attack on a block's data payload without re-sealing."""
-    req = request.get_json() or {}
-    new_data = req.get("data", "TAMPERED DATA PAYLOAD")
+    req = request.get_json(silent=True) or {}
+    new_data = str(req.get("data", "TAMPERED DATA PAYLOAD"))[:50000]
 
     try:
         tampered_block = blockchain_engine.tamper_block(index=index, new_data=new_data)
@@ -95,16 +108,18 @@ def tamper_block(index: int):
 @app.route('/api/remine/<int:index>', methods=['POST'])
 def reseal_block(index: int):
     """Re-seal a specific single block using PoS."""
-    req = request.get_json() or {}
-    validator_name = req.get("validator", None)
+    req = request.get_json(silent=True) or {}
+    validator_name = req.get("validator")
+    if validator_name:
+        validator_name = str(validator_name).strip() or None
 
     try:
         resealed_block = blockchain_engine.reseal_block(index=index, validator_name=validator_name)
         validation = blockchain_engine.is_chain_valid()
         response_payload = {
             "success": True,
-            "remined_index": index,
             "resealed_index": index,
+            "remined_index": index,
             "block": resealed_block.to_dict(),
             "validation": validation.to_dict(),
             "chain_state": blockchain_engine.to_dict()
@@ -150,13 +165,26 @@ def handle_mempool():
         })
 
     # POST submit new transaction
-    req = request.get_json() or {}
+    req = request.get_json(silent=True) or {}
+    raw_sender = req.get("sender", "")
+    raw_recipient = req.get("recipient", "")
+    raw_amount = req.get("amount")
+
     try:
-        tx = Transaction(
-            sender=req.get("sender", "Anonymous"),
-            recipient=req.get("recipient", "Anonymous"),
-            amount=float(req.get("amount", 0.0))
-        )
+        sender = str(raw_sender).strip()
+        recipient = str(raw_recipient).strip()
+        if not sender:
+            sender = "Anonymous"
+        if not recipient:
+            recipient = "Anonymous"
+
+        if raw_amount is None:
+            raise ValueError("Transaction amount is required.")
+        amount = float(raw_amount)
+        if not math.isfinite(amount) or amount <= 0:
+            raise ValueError("Amount must be a positive finite number.")
+
+        tx = Transaction(sender=sender, recipient=recipient, amount=amount)
         tx_id = blockchain_engine.mempool.add_transaction(tx)
         response_payload = {
             "success": True,
@@ -180,18 +208,31 @@ def handle_validators():
             "validators": [v.to_dict() for v in blockchain_engine.validators.values()]
         })
 
-    req = request.get_json() or {}
-    action = req.get("action", "add")
-    name = req.get("name")
-    stake = req.get("stake", 0.0)
+    req = request.get_json(silent=True) or {}
+    action = str(req.get("action", "add")).lower()
+    raw_name = req.get("name")
+    raw_stake = req.get("stake", 0.0)
+
+    if not raw_name or not str(raw_name).strip():
+        return jsonify({"success": False, "error": "Validator name is required."}), 400
+
+    name = str(raw_name).strip()
 
     try:
         if action == "slash":
             v = blockchain_engine.slash_validator(name)
         elif action == "update":
-            v = blockchain_engine.update_validator_stake(name, float(stake))
+            try:
+                stake = float(raw_stake)
+            except (ValueError, TypeError):
+                return jsonify({"success": False, "error": "Stake must be a valid number."}), 400
+            v = blockchain_engine.update_validator_stake(name, stake)
         else:
-            v = blockchain_engine.add_validator(name, float(stake))
+            try:
+                stake = float(raw_stake)
+            except (ValueError, TypeError):
+                return jsonify({"success": False, "error": "Stake must be a valid number."}), 400
+            v = blockchain_engine.add_validator(name, stake)
 
         response_payload = {
             "success": True,
@@ -201,6 +242,8 @@ def handle_validators():
         socketio.emit('validators_updated', response_payload)
         return jsonify(response_payload), 200
 
+    except KeyError as ke:
+        return jsonify({"success": False, "error": str(ke).strip("'")}), 404
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
 
@@ -215,5 +258,8 @@ def handle_connect():
 
 
 if __name__ == '__main__':
-    print("[SERVER] Blockchain Simulation Server running on http://127.0.0.1:5000")
-    socketio.run(app, host='127.0.0.1', port=5000, debug=True)
+    host = os.environ.get('FLASK_HOST', '127.0.0.1')
+    port = int(os.environ.get('FLASK_PORT', 5000))
+    debug = os.environ.get('FLASK_DEBUG', 'False').lower() in ('true', '1', 't')
+    print(f"[SERVER] Blockchain Simulation Server running on http://{host}:{port}")
+    socketio.run(app, host=host, port=port, debug=debug)

@@ -44,6 +44,7 @@ class CanvasRenderer {
         this.ctx.scale(dpr, dpr);
         this.viewportWidth = rect.width;
         this.viewportHeight = rect.height;
+        this.requestRender();
     }
 
     bindEvents() {
@@ -51,12 +52,14 @@ class CanvasRenderer {
             this.isDragging = true;
             this.dragStartX = e.clientX - this.cameraX;
             this.dragStartY = e.clientY - this.cameraY;
+            this.requestRender();
         });
 
         window.addEventListener('mousemove', (e) => {
             if (this.isDragging) {
                 this.cameraX = e.clientX - this.dragStartX;
                 this.cameraY = e.clientY - this.dragStartY;
+                this.requestRender();
             }
         });
 
@@ -72,6 +75,7 @@ class CanvasRenderer {
                 if (distMoved < 5) {
                     this.handleCanvasClick(e);
                 }
+                this.requestRender();
             }
         });
 
@@ -79,18 +83,21 @@ class CanvasRenderer {
             e.preventDefault();
             const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
             this.zoom = Math.min(Math.max(this.zoom * zoomFactor, 0.4), 2.5);
+            this.requestRender();
         }, { passive: false });
     }
 
     setChainData(blocks, validation) {
         this.blocks = blocks || [];
         this.validation = validation || { is_valid: true, broken_at_index: null };
+        this.requestRender();
     }
 
     resetView() {
         this.cameraX = 0;
         this.cameraY = 0;
         this.zoom = 1;
+        this.requestRender();
     }
 
     screenToWorld(screenX, screenY) {
@@ -124,6 +131,7 @@ class CanvasRenderer {
                 pos.y <= bPos.y + bPos.h
             ) {
                 this.selectedBlockIndex = i;
+                this.requestRender();
                 if (this.onBlockSelectCallback) {
                     this.onBlockSelectCallback(this.blocks[i], i);
                 }
@@ -133,12 +141,28 @@ class CanvasRenderer {
     }
 
     startLoop() {
-        const render = () => {
+        this.renderRequested = false;
+        this.requestRender();
+    }
+
+    requestRender() {
+        if (!this.renderRequested) {
+            this.renderRequested = true;
+            requestAnimationFrame(() => this.renderFrame());
+        }
+    }
+
+    renderFrame() {
+        this.renderRequested = false;
+        if (!this.validation.is_valid) {
             this.pulsePhase = (this.pulsePhase + 0.05) % (Math.PI * 2);
-            this.draw();
-            requestAnimationFrame(render);
-        };
-        requestAnimationFrame(render);
+        }
+        this.draw();
+
+        // Continue animation loop only if pulsing invalid chain or currently dragging
+        if (!this.validation.is_valid || this.isDragging) {
+            this.requestRender();
+        }
     }
 
     draw() {
