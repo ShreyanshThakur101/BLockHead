@@ -1,0 +1,208 @@
+/* ==========================================================================
+   MAIN APPLICATION BOOTSTRAPPER (Proof of Stake)
+   ========================================================================== */
+
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('🚀 Initializing Proof of Stake Blockchain Simulation...');
+
+    // 1. Initialize Canvas Renderer Engine
+    const canvasElement = document.getElementById('blockchain-canvas');
+    const renderer = new CanvasRenderer(canvasElement);
+
+    // 2. State Cache
+    let currentChainState = null;
+
+    // Helper to refresh chain data from API
+    async function syncChainState() {
+        try {
+            const [chainRes, mempoolRes] = await Promise.all([
+                api.getChain(),
+                api.getMempool()
+            ]);
+
+            if (chainRes && chainRes.success) {
+                currentChainState = chainRes.data;
+                renderer.setChainData(currentChainState.blocks, currentChainState.validation);
+                ui.updateHealthBadge(currentChainState.validation);
+                
+                // Active validators are directly provided in chain data
+                if (currentChainState.validators) {
+                    ui.renderValidatorsList(currentChainState.validators);
+                }
+            }
+
+            if (mempoolRes && mempoolRes.success) {
+                ui.renderMempoolList(mempoolRes.pending_transactions);
+            }
+        } catch (err) {
+            console.error('Failed to sync chain state (server offline?):', err);
+            ui.setServerOfflineUI();
+        }
+    }
+
+    // 3. Connect Socket.IO Realtime Listeners
+    api.initSocket();
+
+    api.on('block_added', (data) => {
+        ui.hideMiningLoader();
+        syncChainState();
+    });
+
+    api.on('chain_tampered', (data) => {
+        syncChainState();
+        if (ui.selectedBlockIndex !== null && data.chain_state && data.chain_state.blocks) {
+            const updatedBlock = data.chain_state.blocks[ui.selectedBlockIndex];
+            if (updatedBlock) {
+                ui.openInspector(updatedBlock, ui.selectedBlockIndex, data.validation);
+            }
+        }
+    });
+
+    api.on('block_resealed', (data) => {
+        ui.hideMiningLoader();
+        syncChainState();
+        if (ui.selectedBlockIndex !== null && data.chain_state && data.chain_state.blocks) {
+            const updatedBlock = data.chain_state.blocks[ui.selectedBlockIndex];
+            if (updatedBlock) {
+                ui.openInspector(updatedBlock, ui.selectedBlockIndex, data.validation);
+            }
+        }
+    });
+
+    api.on('mempool_updated', (data) => {
+        syncChainState();
+    });
+
+    api.on('validators_updated', (data) => {
+        syncChainState();
+    });
+
+    // 4. Bind Canvas Block Click to Inspector Drawer
+    renderer.onBlockSelectCallback = (block, index) => {
+        if (currentChainState) {
+            ui.openInspector(block, index, currentChainState.validation);
+        }
+    };
+
+    // 5. Action Handlers
+
+    // Forge / Propose Block Button
+    document.getElementById('btn-mine-block').addEventListener('click', async () => {
+        ui.showMiningLoader('Selecting Validator via PoS Lottery...');
+        try {
+            await api.forgeBlock();
+            ui.hideMiningLoader();
+            await syncChainState();
+        } catch (err) {
+            ui.hideMiningLoader();
+            if (err.message && err.message.includes('Failed to fetch')) {
+                alert(`Backend Server Offline: Cannot connect to ${CONFIG.API_BASE_URL}.\n\nPlease ensure the Python backend server is running in your terminal:\n  python backend/app.py`);
+            } else {
+                alert(`PoS Block Proposal Error: ${err.message}`);
+            }
+        }
+    });
+
+    // Validate Chain Button
+    document.getElementById('btn-validate-chain').addEventListener('click', async () => {
+        try {
+            const res = await api.validateChain();
+            if (res.success) {
+                ui.updateHealthBadge(res.validation);
+                alert(res.validation.reason);
+            }
+        } catch (err) {
+            alert(`Validation Error: ${err.message}`);
+        }
+    });
+
+    // Reset Camera View Button
+    document.getElementById('btn-reset-view').addEventListener('click', () => {
+        renderer.resetView();
+    });
+
+    // Tamper Attack Button in Drawer
+    document.getElementById('btn-tamper-block').addEventListener('click', async () => {
+        if (ui.selectedBlockIndex === null) return;
+        const newPayload = document.getElementById('insp-data-input').value;
+        try {
+            const res = await api.tamperBlock(ui.selectedBlockIndex, newPayload);
+            await syncChainState();
+            if (res && res.chain_state && res.chain_state.blocks) {
+                const updatedBlock = res.chain_state.blocks[ui.selectedBlockIndex];
+                if (updatedBlock) {
+                    ui.openInspector(updatedBlock, ui.selectedBlockIndex, res.validation);
+                }
+            }
+        } catch (err) {
+            alert(`Tamper Error: ${err.message}`);
+        }
+    });
+
+    // Re-seal / Repair Block Button in Drawer
+    document.getElementById('btn-remine-block').addEventListener('click', async () => {
+        if (ui.selectedBlockIndex === null) return;
+        ui.showMiningLoader(`Re-sealing Block #${ui.selectedBlockIndex}...`);
+        try {
+            const res = await api.resealBlock(ui.selectedBlockIndex);
+            ui.hideMiningLoader();
+            await syncChainState();
+            if (res && res.chain_state && res.chain_state.blocks) {
+                const updatedBlock = res.chain_state.blocks[ui.selectedBlockIndex];
+                if (updatedBlock) {
+                    ui.openInspector(updatedBlock, ui.selectedBlockIndex, res.validation);
+                }
+            }
+        } catch (err) {
+            ui.hideMiningLoader();
+            alert(`Re-seal Error: ${err.message}`);
+        }
+    });
+
+    // Create Transaction Form Submission
+    document.getElementById('form-create-tx').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const sender = document.getElementById('tx-sender').value;
+        const recipient = document.getElementById('tx-recipient').value;
+        const amount = parseFloat(document.getElementById('tx-amount').value);
+
+        try {
+            await api.createTransaction(sender, recipient, amount);
+            document.getElementById('tx-sender').value = '';
+            document.getElementById('tx-recipient').value = '';
+            document.getElementById('tx-amount').value = '';
+            await syncChainState();
+        } catch (err) {
+            alert(`Transaction Error: ${err.message}`);
+        }
+    });
+
+    // Register Validator Form Submission
+    document.getElementById('form-add-validator').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const name = document.getElementById('val-name').value;
+        const stake = parseFloat(document.getElementById('val-stake').value);
+
+        try {
+            await api.updateValidator('add', name, stake);
+            document.getElementById('val-name').value = '';
+            document.getElementById('val-stake').value = '';
+            await syncChainState();
+        } catch (err) {
+            alert(`Validator Error: ${err.message}`);
+        }
+    });
+
+    // Slash Validator Callback
+    ui.onSlashValidator = async (name) => {
+        try {
+            await api.updateValidator('slash', name, 0);
+            await syncChainState();
+        } catch (err) {
+            alert(`Slash Error: ${err.message}`);
+        }
+    };
+
+    // Initial State Fetch
+    await syncChainState();
+});
