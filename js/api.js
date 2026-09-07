@@ -69,11 +69,17 @@ class ApiClient {
     }
 
     async _request(endpoint, method = 'GET', body = null) {
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+
+        if (typeof auth !== 'undefined' && auth && auth.getToken()) {
+            headers['Authorization'] = `Bearer ${auth.getToken()}`;
+        }
+
         const options = {
             method,
-            headers: {
-                'Content-Type': 'application/json'
-            }
+            headers
         };
 
         if (body) {
@@ -135,6 +141,18 @@ class ApiClient {
 
     async updateValidator(action, name, stake = 0) {
         return await this._request('/validators', 'POST', { action, name, stake });
+    }
+
+    async register(username, password, role = 'viewer') {
+        return await this._request('/auth/register', 'POST', { username, password, role });
+    }
+
+    async login(username, password) {
+        return await this._request('/auth/login', 'POST', { username, password });
+    }
+
+    async getProfile() {
+        return await this._request('/auth/me');
     }
 }
 

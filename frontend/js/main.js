@@ -84,10 +84,89 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
 
-    // 5. Action Handlers
+    // 5. Auth & RBAC Handlers
+    ui.onAuthSubmit = async (username, password, role, isRegister) => {
+        try {
+            if (!username || !password) {
+                ui.showAuthError('Username and password are required.');
+                return;
+            }
+
+            if (isRegister) {
+                await api.register(username, password, role);
+            }
+
+            const loginRes = await api.login(username, password);
+            if (loginRes && loginRes.token && loginRes.user) {
+                auth.setSession(loginRes.token, loginRes.user);
+                ui.closeAuthModal();
+                ui.updateRoleUI(loginRes.user);
+                await syncChainState();
+            } else {
+                ui.showAuthError('Invalid response from server.');
+            }
+        } catch (err) {
+            ui.showAuthError(err.message || 'Authentication failed.');
+        }
+    };
+
+    ui.onDemoLogin = async (username, password) => {
+        try {
+            const loginRes = await api.login(username, password);
+            if (loginRes && loginRes.token && loginRes.user) {
+                auth.setSession(loginRes.token, loginRes.user);
+                ui.closeAuthModal();
+                ui.updateRoleUI(loginRes.user);
+                await syncChainState();
+            }
+        } catch (err) {
+            ui.showAuthError(err.message || 'Demo login failed.');
+        }
+    };
+
+    ui.onLogout = () => {
+        auth.clearSession();
+        ui.updateRoleUI(null);
+        syncChainState();
+    };
+
+    auth.onAuthStateChanged((user) => {
+        ui.updateRoleUI(user);
+    });
+
+    // Check token and initialize role UI
+    if (auth.isLoggedIn()) {
+        try {
+            const profile = await api.getProfile();
+            if (profile && profile.user) {
+                auth.setSession(auth.getToken(), profile.user);
+                ui.updateRoleUI(profile.user);
+            } else {
+                auth.clearSession();
+                ui.updateRoleUI(null);
+            }
+        } catch (err) {
+            console.warn('Session verification notice:', err.message);
+            if (err.message && err.message.includes('401')) {
+                auth.clearSession();
+                ui.updateRoleUI(null);
+            } else {
+                ui.updateRoleUI(auth.getUser());
+            }
+        }
+    } else {
+        ui.updateRoleUI(null);
+    }
+
+    // 6. Action Handlers
 
     // Forge / Propose Block Button
     document.getElementById('btn-mine-block').addEventListener('click', async () => {
+        if (!auth.isAdmin()) {
+            ui.openAuthModal('login');
+            return;
+        }
+
         ui.showMiningLoader('Selecting Validator via PoS Lottery...');
         try {
             await api.forgeBlock();
@@ -123,6 +202,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Tamper Attack Button in Drawer
     document.getElementById('btn-tamper-block').addEventListener('click', async () => {
+        if (!auth.isAdmin()) {
+            ui.openAuthModal('login');
+            return;
+        }
         if (ui.selectedBlockIndex === null) return;
         const newPayload = document.getElementById('insp-data-input').value;
         try {
@@ -141,6 +224,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Re-seal / Repair Block Button in Drawer
     document.getElementById('btn-remine-block').addEventListener('click', async () => {
+        if (!auth.isAdmin()) {
+            ui.openAuthModal('login');
+            return;
+        }
         if (ui.selectedBlockIndex === null) return;
         ui.showMiningLoader(`Re-sealing Block #${ui.selectedBlockIndex}...`);
         try {
@@ -180,6 +267,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Register Validator Form Submission
     document.getElementById('form-add-validator').addEventListener('submit', async (e) => {
         e.preventDefault();
+        if (!auth.isAdmin()) {
+            ui.openAuthModal('login');
+            return;
+        }
         const name = document.getElementById('val-name').value;
         const stake = parseFloat(document.getElementById('val-stake').value);
 
@@ -195,6 +286,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Slash Validator Callback
     ui.onSlashValidator = async (name) => {
+        if (!auth.isAdmin()) {
+            ui.openAuthModal('login');
+            return;
+        }
         try {
             await api.updateValidator('slash', name, 0);
             await syncChainState();

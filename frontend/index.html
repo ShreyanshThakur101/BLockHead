@@ -43,8 +43,28 @@
                         <span id="health-badge-text">100% VALID</span>
                     </div>
                 </div>
+
+                <!-- User Auth & Role Panel -->
+                <div class="user-auth-panel">
+                    <label>Access Role</label>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div id="user-role-badge" class="badge badge-viewer">
+                            <span class="badge-dot"></span>
+                            <span id="user-role-text">👁️ Viewer</span>
+                        </div>
+                        <button id="btn-open-auth" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">Sign In</button>
+                        <button id="btn-logout" class="btn btn-outline hidden" style="padding: 6px 12px; font-size: 12px;">Log Out</button>
+                    </div>
+                </div>
             </div>
         </header>
+
+        <!-- Role Mode Banner -->
+        <div id="role-mode-banner" class="mode-banner viewer-banner">
+            <span id="mode-banner-icon" style="margin-right: 8px; font-size: 16px;">👁️</span>
+            <span id="mode-banner-text"><strong>Viewer Mode:</strong> Exploring the blockchain in read-only mode. Sign in as <strong>Admin</strong> to forge blocks, simulate attacks, or edit network state.</span>
+            <button id="btn-banner-switch-admin" class="btn btn-primary" style="margin-left: 12px; padding: 4px 10px; font-size: 11px;">Switch to Admin</button>
+        </div>
 
         <!-- Secondary Toolbar -->
         <section id="toolbar">
@@ -124,6 +144,10 @@
                     <button id="btn-remine-block" class="btn btn-warning">🔨 Re-seal / Repair Block</button>
                 </div>
 
+                <div id="drawer-viewer-notice" class="viewer-hint hidden" style="margin-top: 10px; padding: 8px 12px; background: rgba(255,255,255,0.05); border-radius: 8px; font-size: 12px; color: var(--text-secondary); text-align: center;">
+                    🔒 <em>Viewer Mode: Sign in as Admin to tamper or repair blocks.</em>
+                </div>
+
                 <div id="tamper-alert-box" class="alert-box hidden">
                     <strong>Chain Break Alert!</strong>
                     <p id="tamper-alert-text">This block has been modified without re-sealing.</p>
@@ -188,10 +212,62 @@
             </div>
         </div>
 
+        <!-- Modal: User Authentication (Login / Register) -->
+        <div id="auth-modal" class="modal-backdrop hidden">
+            <div class="modal-card" style="max-width: 420px;">
+                <div class="modal-header">
+                    <h3 id="auth-modal-title">Sign In</h3>
+                    <button id="btn-close-auth" class="btn-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="auth-tabs" style="display: flex; gap: 8px; margin-bottom: 16px;">
+                        <button id="tab-auth-login" class="btn btn-primary" style="flex: 1;">Sign In</button>
+                        <button id="tab-auth-register" class="btn btn-secondary" style="flex: 1;">Create Account</button>
+                    </div>
+
+                    <form id="form-auth" class="tx-form" style="display: flex; flex-direction: column; gap: 12px;">
+                        <div>
+                            <label style="display: block; font-size: 11px; margin-bottom: 4px; color: var(--text-secondary); text-transform: uppercase;">Username</label>
+                            <input type="text" id="auth-username" placeholder="Username (e.g. admin)" required style="width: 100%;">
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 11px; margin-bottom: 4px; color: var(--text-secondary); text-transform: uppercase;">Password</label>
+                            <input type="password" id="auth-password" placeholder="Password" required style="width: 100%;">
+                        </div>
+
+                        <div id="auth-role-group" class="hidden">
+                            <label style="display: block; font-size: 11px; margin-bottom: 4px; color: var(--text-secondary); text-transform: uppercase;">Role</label>
+                            <select id="auth-role" style="width: 100%; padding: 10px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 8px; color: var(--text-primary); font-size: 13px;">
+                                <option value="viewer">👁️ Viewer (Read-only Explorer)</option>
+                                <option value="admin">🛡️ Admin (Full Network Authority)</option>
+                            </select>
+                        </div>
+
+                        <div id="auth-error-box" class="alert-box hidden" style="background: rgba(239, 68, 68, 0.15); border-color: var(--status-tampered); color: #fca5a5; font-size: 12px; padding: 8px 12px; border-radius: 6px;">
+                            <span id="auth-error-text">Error message</span>
+                        </div>
+
+                        <button type="submit" id="btn-submit-auth" class="btn btn-primary" style="width: 100%; padding: 10px; margin-top: 6px;">Sign In</button>
+                    </form>
+
+                    <hr class="divider" style="margin: 16px 0;">
+
+                    <div style="text-align: center;">
+                        <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Instant Demo Logins</p>
+                        <div style="display: flex; gap: 8px; justify-content: center;">
+                            <button id="btn-demo-admin" class="btn btn-secondary" style="font-size: 11px; padding: 6px 14px;">🛡️ Demo Admin</button>
+                            <button id="btn-demo-viewer" class="btn btn-secondary" style="font-size: 11px; padding: 6px 14px;">👁️ Demo Viewer</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <!-- JavaScript Scripts -->
     <script src="js/config.js"></script>
+    <script src="js/auth.js"></script>
     <script src="js/api.js"></script>
     <script src="js/canvas.js"></script>
     <script src="js/ui.js"></script>

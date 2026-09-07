@@ -15,6 +15,16 @@ import math
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from backend.blockchain import Blockchain, Transaction
+from backend.auth import (
+    hash_password,
+    verify_password,
+    generate_token,
+    verify_token,
+    get_current_user,
+    require_auth,
+    require_admin,
+    seed_default_users
+)
 
 public_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "public"))
 frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend"))
@@ -25,8 +35,9 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'blockchain_sim_secret_k
 CORS(app, resources={r"/*": {"origins": "*"}})
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Global singleton Blockchain instance (Pure Proof of Stake)
+# Global singleton Blockchain instance (Pure Proof of Stake with Database persistence)
 blockchain_engine = Blockchain()
+seed_default_users(blockchain_engine.db)
 
 
 @app.route('/')
@@ -56,10 +67,96 @@ def get_chain():
     })
 
 
+# ==============================================================================
+# AUTHENTICATION & RBAC ENDPOINTS
+# ==============================================================================
+
+@app.route('/api/auth/register', methods=['POST'])
+@app.route('/auth/register', methods=['POST'])
+def auth_register():
+    """Register a new user with chosen role (admin or viewer)."""
+    req = request.get_json(silent=True) or {}
+    username = str(req.get('username', '')).strip()
+    password = str(req.get('password', '')).strip()
+    role = str(req.get('role', 'viewer')).strip().lower()
+    
+    if not username or len(username) < 3:
+        return jsonify({"success": False, "error": "Username must be at least 3 characters."}), 400
+    if not password or len(password) < 6:
+        return jsonify({"success": False, "error": "Password must be at least 6 characters."}), 400
+    if role not in ['admin', 'viewer']:
+        role = 'viewer'
+        
+    if blockchain_engine.db.get_user(username):
+        return jsonify({"success": False, "error": f"Username '{username}' is already taken."}), 409
+        
+    pwd_hash, salt = hash_password(password)
+    ok = blockchain_engine.db.create_user(username, pwd_hash, salt, role=role)
+    if not ok:
+        return jsonify({"success": False, "error": "Failed to register user."}), 500
+        
+    token = generate_token(username, role)
+    return jsonify({
+        "success": True,
+        "message": f"Registered successfully as {role}.",
+        "token": token,
+        "user": {
+            "username": username,
+            "role": role
+        }
+    }), 201
+
+
+@app.route('/api/auth/login', methods=['POST'])
+@app.route('/auth/login', methods=['POST'])
+def auth_login():
+    """Sign in existing user and return bearer token with role."""
+    req = request.get_json(silent=True) or {}
+    username = str(req.get('username', '')).strip()
+    password = str(req.get('password', '')).strip()
+    
+    if not username or not password:
+        return jsonify({"success": False, "error": "Username and password are required."}), 400
+        
+    user_record = blockchain_engine.db.get_user(username)
+    if not user_record or not verify_password(password, user_record['password_hash'], user_record['salt']):
+        return jsonify({"success": False, "error": "Invalid username or password."}), 401
+        
+    token = generate_token(user_record['username'], user_record['role'])
+    return jsonify({
+        "success": True,
+        "message": "Login successful.",
+        "token": token,
+        "user": {
+            "username": user_record['username'],
+            "role": user_record['role']
+        }
+    }), 200
+
+
+@app.route('/api/auth/me', methods=['GET'])
+@app.route('/auth/me', methods=['GET'])
+def auth_me():
+    """Return currently authenticated user profile and permissions."""
+    user = get_current_user()
+    if not user:
+        return jsonify({
+            "success": True,
+            "authenticated": False,
+            "user": None
+        }), 200
+    return jsonify({
+        "success": True,
+        "authenticated": True,
+        "user": user
+    }), 200
+
+
 @app.route('/api/mine', methods=['POST'])
 @app.route('/api/forge', methods=['POST'])
 @app.route('/mine', methods=['POST'])
 @app.route('/forge', methods=['POST'])
+@require_admin
 def forge_block():
     """Propose and seal a new block using Proof of Stake validator selection."""
     req = request.get_json(silent=True) or {}
@@ -88,6 +185,7 @@ def forge_block():
 
 @app.route('/api/tamper/<int:index>', methods=['POST'])
 @app.route('/tamper/<int:index>', methods=['POST'])
+@require_admin
 def tamper_block(index: int):
     """Simulate cyber attack on a block's data payload without re-sealing."""
     req = request.get_json(silent=True) or {}
@@ -116,6 +214,7 @@ def tamper_block(index: int):
 @app.route('/api/remine/<int:index>', methods=['POST'])
 @app.route('/reseal/<int:index>', methods=['POST'])
 @app.route('/remine/<int:index>', methods=['POST'])
+@require_admin
 def reseal_block(index: int):
     """Re-seal a specific single block using PoS."""
     req = request.get_json(silent=True) or {}
@@ -221,6 +320,14 @@ def handle_validators():
             "success": True,
             "validators": [v.to_dict() for v in blockchain_engine.validators.values()]
         })
+
+    # Mutation actions (add, slash, update) require Admin privileges
+    user = get_current_user()
+    if not user or user.get("role") != "admin":
+        return jsonify({
+            "success": False,
+            "error": "Forbidden: Managing validators requires Admin privileges. Please sign in as admin."
+        }), 403
 
     req = request.get_json(silent=True) or {}
     action = str(req.get("action", "add")).lower()

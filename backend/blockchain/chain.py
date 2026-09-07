@@ -11,49 +11,60 @@ from backend.blockchain.models import Block, Transaction, Validator, ChainValida
 from backend.blockchain.hashing import calculate_block_hash, build_merkle_root
 from backend.blockchain.consensus import ProofOfStakeStrategy
 from backend.blockchain.mempool import Mempool
+from backend.blockchain.database import DatabaseManager
 
 
 class Blockchain:
-    def __init__(self):
+    def __init__(self, db: Optional[DatabaseManager] = None):
         self._lock = threading.RLock()
         self.blocks: List[Block] = []
         self.mempool = Mempool()
         self.validators: Dict[str, Validator] = {}
         self.consensus_mode = "pos"
-
-        # Initialize default validators for PoS simulation
-        self._init_default_validators()
-
-        # Initialize consensus strategy
         self.pos_strategy = ProofOfStakeStrategy()
+        
+        # Database persistence manager
+        self.db = db or DatabaseManager()
 
-        # Create Genesis Block
-        self._create_genesis_block()
+        # Load persisted validators or initialize defaults
+        self._load_or_init_validators()
 
-    def _init_default_validators(self):
-        """Setup initial default validator pool for Proof of Stake."""
-        defaults = [
-            Validator("Alice_Node", 50.0),
-            Validator("Bob_Node", 30.0),
-            Validator("Carol_Node", 20.0),
-        ]
-        for v in defaults:
-            self.validators[v.name] = v
+        # Load persisted chain or generate Genesis block
+        self._load_or_create_chain()
 
-    def _create_genesis_block(self):
-        """Generate hardcoded Genesis Block (Index 0)."""
-        genesis = Block(
-            index=0,
-            timestamp=time.time(),
-            previous_hash="0" * 64,
-            data="Genesis Block",
-            transactions=[],
-            merkle_root="",
-            validator="Genesis_Authority"
-        )
-        # Seal genesis block
-        genesis.hash = calculate_block_hash(genesis)
-        self.blocks.append(genesis)
+    def _load_or_init_validators(self):
+        """Load validators from database, or seed defaults if empty."""
+        loaded = self.db.load_validators()
+        if loaded:
+            self.validators = loaded
+        else:
+            defaults = [
+                Validator("Alice_Node", 50.0),
+                Validator("Bob_Node", 30.0),
+                Validator("Carol_Node", 20.0),
+            ]
+            for v in defaults:
+                self.validators[v.name] = v
+                self.db.save_validator(v)
+
+    def _load_or_create_chain(self):
+        """Load chain from database, or generate hardcoded Genesis Block (Index 0)."""
+        loaded_blocks = self.db.load_blocks()
+        if loaded_blocks:
+            self.blocks = loaded_blocks
+        else:
+            genesis = Block(
+                index=0,
+                timestamp=time.time(),
+                previous_hash="0" * 64,
+                data="Genesis Block",
+                transactions=[],
+                merkle_root="",
+                validator="Genesis_Authority"
+            )
+            genesis.hash = calculate_block_hash(genesis)
+            self.blocks.append(genesis)
+            self.db.save_block(genesis)
 
     @property
     def current_strategy(self) -> ProofOfStakeStrategy:
@@ -71,6 +82,7 @@ class Blockchain:
 
             v = Validator(name=name, stake=float(stake))
             self.validators[name] = v
+            self.db.save_validator(v)
             return v
 
     def update_validator_stake(self, name: str, stake: float) -> Validator:
@@ -81,8 +93,10 @@ class Blockchain:
             if not math.isfinite(stake) or stake < 0:
                 raise ValueError("Stake must be a non-negative finite number.")
 
-            self.validators[name].stake = float(stake)
-            return self.validators[name]
+            v = self.validators[name]
+            v.stake = float(stake)
+            self.db.save_validator(v)
+            return v
 
     def slash_validator(self, name: str) -> Validator:
         with self._lock:
@@ -93,6 +107,7 @@ class Blockchain:
             v = self.validators[name]
             v.is_slashed = True
             v.stake = 0.0
+            self.db.save_validator(v)
             return v
 
     def add_block(
@@ -137,6 +152,7 @@ class Blockchain:
                 self.mempool.clear_transactions(confirmed_ids)
 
             self.blocks.append(sealed_block)
+            self.db.save_block(sealed_block)
             return sealed_block
 
     def tamper_block(self, index: int, new_data: str) -> Block:
@@ -150,7 +166,7 @@ class Blockchain:
 
             target = self.blocks[index]
             target.data = str(new_data)
-            # Note: target.hash is NOT updated here intentionally to trigger validation failure
+            self.db.save_block(target)
             return target
 
     def reseal_block(self, index: int, validator_name: Optional[str] = None, **kwargs) -> Block:
@@ -174,6 +190,7 @@ class Blockchain:
             )
 
             self.blocks[index] = resealed
+            self.db.save_block(resealed)
             return resealed
 
     def remine_block(self, index: int, **kwargs) -> Block:

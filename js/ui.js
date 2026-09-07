@@ -17,6 +17,10 @@ class UiManager {
         this.selectedBlock = null;
         this.selectedBlockIndex = null;
         this.onSlashValidator = null;
+        this.authMode = 'login'; // 'login' | 'register'
+        this.onAuthSubmit = null;
+        this.onDemoLogin = null;
+        this.onLogout = null;
         
         // Element References
         this.elements = {
@@ -26,6 +30,34 @@ class UiManager {
             // Health badge
             healthBadge: document.getElementById('health-badge'),
             healthBadgeText: document.getElementById('health-badge-text'),
+
+            // Role & Auth Elements
+            userRoleBadge: document.getElementById('user-role-badge'),
+            userRoleText: document.getElementById('user-role-text'),
+            btnOpenAuth: document.getElementById('btn-open-auth'),
+            btnLogout: document.getElementById('btn-logout'),
+            roleModeBanner: document.getElementById('role-mode-banner'),
+            modeBannerIcon: document.getElementById('mode-banner-icon'),
+            modeBannerText: document.getElementById('mode-banner-text'),
+            btnBannerSwitchAdmin: document.getElementById('btn-banner-switch-admin'),
+            drawerViewerNotice: document.getElementById('drawer-viewer-notice'),
+
+            // Auth Modal
+            authModal: document.getElementById('auth-modal'),
+            btnCloseAuth: document.getElementById('btn-close-auth'),
+            authModalTitle: document.getElementById('auth-modal-title'),
+            tabAuthLogin: document.getElementById('tab-auth-login'),
+            tabAuthRegister: document.getElementById('tab-auth-register'),
+            formAuth: document.getElementById('form-auth'),
+            authUsername: document.getElementById('auth-username'),
+            authPassword: document.getElementById('auth-password'),
+            authRoleGroup: document.getElementById('auth-role-group'),
+            authRole: document.getElementById('auth-role'),
+            authErrorBox: document.getElementById('auth-error-box'),
+            authErrorText: document.getElementById('auth-error-text'),
+            btnSubmitAuth: document.getElementById('btn-submit-auth'),
+            btnDemoAdmin: document.getElementById('btn-demo-admin'),
+            btnDemoViewer: document.getElementById('btn-demo-viewer'),
             
             // Actions
             btnMineBlock: document.getElementById('btn-mine-block'),
@@ -74,13 +106,72 @@ class UiManager {
 
     bindEvents() {
         // Drawer Close
-        this.elements.btnCloseInspector.addEventListener('click', () => this.closeInspector());
+        if (this.elements.btnCloseInspector) {
+            this.elements.btnCloseInspector.addEventListener('click', () => this.closeInspector());
+        }
         
         // Modals Open/Close
-        this.elements.btnOpenMempool.addEventListener('click', () => this.openMempoolModal());
-        this.elements.btnCloseMempool.addEventListener('click', () => this.closeMempoolModal());
-        this.elements.btnManageValidators.addEventListener('click', () => this.openValidatorsModal());
-        this.elements.btnCloseValidators.addEventListener('click', () => this.closeValidatorsModal());
+        if (this.elements.btnOpenMempool) {
+            this.elements.btnOpenMempool.addEventListener('click', () => this.openMempoolModal());
+        }
+        if (this.elements.btnCloseMempool) {
+            this.elements.btnCloseMempool.addEventListener('click', () => this.closeMempoolModal());
+        }
+        if (this.elements.btnManageValidators) {
+            this.elements.btnManageValidators.addEventListener('click', () => this.openValidatorsModal());
+        }
+        if (this.elements.btnCloseValidators) {
+            this.elements.btnCloseValidators.addEventListener('click', () => this.closeValidatorsModal());
+        }
+
+        // Auth Modal & Role Events
+        if (this.elements.btnOpenAuth) {
+            this.elements.btnOpenAuth.addEventListener('click', () => this.openAuthModal('login'));
+        }
+        if (this.elements.btnBannerSwitchAdmin) {
+            this.elements.btnBannerSwitchAdmin.addEventListener('click', () => this.openAuthModal('login'));
+        }
+        if (this.elements.btnCloseAuth) {
+            this.elements.btnCloseAuth.addEventListener('click', () => this.closeAuthModal());
+        }
+        if (this.elements.tabAuthLogin) {
+            this.elements.tabAuthLogin.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.setAuthMode('login');
+            });
+        }
+        if (this.elements.tabAuthRegister) {
+            this.elements.tabAuthRegister.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.setAuthMode('register');
+            });
+        }
+        if (this.elements.btnLogout) {
+            this.elements.btnLogout.addEventListener('click', () => {
+                if (this.onLogout) this.onLogout();
+            });
+        }
+        if (this.elements.btnDemoAdmin) {
+            this.elements.btnDemoAdmin.addEventListener('click', () => {
+                if (this.onDemoLogin) this.onDemoLogin('admin', 'admin123');
+            });
+        }
+        if (this.elements.btnDemoViewer) {
+            this.elements.btnDemoViewer.addEventListener('click', () => {
+                if (this.onDemoLogin) this.onDemoLogin('viewer', 'viewer123');
+            });
+        }
+        if (this.elements.formAuth) {
+            this.elements.formAuth.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const username = this.elements.authUsername ? this.elements.authUsername.value.trim() : '';
+                const password = this.elements.authPassword ? this.elements.authPassword.value : '';
+                const role = this.elements.authRole ? this.elements.authRole.value : 'viewer';
+                if (this.onAuthSubmit) {
+                    this.onAuthSubmit(username, password, role, this.authMode === 'register');
+                }
+            });
+        }
 
         // Event delegation for validator slash buttons
         if (this.elements.validatorsList) {
@@ -93,6 +184,169 @@ class UiManager {
                     }
                 }
             });
+        }
+    }
+
+    setAuthMode(mode) {
+        this.authMode = mode;
+        this.hideAuthError();
+        if (mode === 'login') {
+            if (this.elements.tabAuthLogin) {
+                this.elements.tabAuthLogin.className = 'btn btn-primary';
+                this.elements.tabAuthLogin.style.flex = '1';
+            }
+            if (this.elements.tabAuthRegister) {
+                this.elements.tabAuthRegister.className = 'btn btn-secondary';
+                this.elements.tabAuthRegister.style.flex = '1';
+            }
+            if (this.elements.authModalTitle) {
+                this.elements.authModalTitle.textContent = 'Sign In';
+            }
+            if (this.elements.btnSubmitAuth) {
+                this.elements.btnSubmitAuth.textContent = 'Sign In';
+            }
+            if (this.elements.authRoleGroup) {
+                this.elements.authRoleGroup.classList.add('hidden');
+            }
+        } else {
+            if (this.elements.tabAuthLogin) {
+                this.elements.tabAuthLogin.className = 'btn btn-secondary';
+                this.elements.tabAuthLogin.style.flex = '1';
+            }
+            if (this.elements.tabAuthRegister) {
+                this.elements.tabAuthRegister.className = 'btn btn-primary';
+                this.elements.tabAuthRegister.style.flex = '1';
+            }
+            if (this.elements.authModalTitle) {
+                this.elements.authModalTitle.textContent = 'Create Account';
+            }
+            if (this.elements.btnSubmitAuth) {
+                this.elements.btnSubmitAuth.textContent = 'Register & Sign In';
+            }
+            if (this.elements.authRoleGroup) {
+                this.elements.authRoleGroup.classList.remove('hidden');
+            }
+        }
+    }
+
+    openAuthModal(mode = 'login') {
+        this.setAuthMode(mode);
+        if (this.elements.authUsername) this.elements.authUsername.value = '';
+        if (this.elements.authPassword) this.elements.authPassword.value = '';
+        if (this.elements.authModal) this.elements.authModal.classList.remove('hidden');
+        if (this.elements.authUsername) this.elements.authUsername.focus();
+    }
+
+    closeAuthModal() {
+        if (this.elements.authModal) this.elements.authModal.classList.add('hidden');
+    }
+
+    showAuthError(msg) {
+        if (this.elements.authErrorBox && this.elements.authErrorText) {
+            this.elements.authErrorText.textContent = msg;
+            this.elements.authErrorBox.classList.remove('hidden');
+        }
+    }
+
+    hideAuthError() {
+        if (this.elements.authErrorBox) {
+            this.elements.authErrorBox.classList.add('hidden');
+        }
+    }
+
+    updateRoleUI(user) {
+        const isAdmin = !!(user && user.role === 'admin');
+
+        // Header Badge & Buttons
+        if (user) {
+            if (this.elements.btnOpenAuth) this.elements.btnOpenAuth.classList.add('hidden');
+            if (this.elements.btnLogout) this.elements.btnLogout.classList.remove('hidden');
+            if (isAdmin) {
+                if (this.elements.userRoleBadge) this.elements.userRoleBadge.className = 'badge badge-admin';
+                if (this.elements.userRoleText) this.elements.userRoleText.textContent = `🛡️ Admin: ${user.username}`;
+            } else {
+                if (this.elements.userRoleBadge) this.elements.userRoleBadge.className = 'badge badge-viewer';
+                if (this.elements.userRoleText) this.elements.userRoleText.textContent = `👁️ Viewer: ${user.username}`;
+            }
+        } else {
+            if (this.elements.btnOpenAuth) this.elements.btnOpenAuth.classList.remove('hidden');
+            if (this.elements.btnLogout) this.elements.btnLogout.classList.add('hidden');
+            if (this.elements.userRoleBadge) this.elements.userRoleBadge.className = 'badge badge-viewer';
+            if (this.elements.userRoleText) this.elements.userRoleText.textContent = '👁️ Viewer';
+        }
+
+        // Mode Banner
+        if (this.elements.roleModeBanner) {
+            if (isAdmin) {
+                this.elements.roleModeBanner.className = 'mode-banner admin-banner';
+                if (this.elements.modeBannerIcon) this.elements.modeBannerIcon.textContent = '🛡️';
+                if (this.elements.modeBannerText) {
+                    this.elements.modeBannerText.innerHTML = '<strong>Admin Mode:</strong> Full blockchain authority enabled. You can forge blocks, simulate attacks, add/slash validators, and modify network state.';
+                }
+                if (this.elements.btnBannerSwitchAdmin) this.elements.btnBannerSwitchAdmin.classList.add('hidden');
+            } else {
+                this.elements.roleModeBanner.className = 'mode-banner viewer-banner';
+                if (this.elements.modeBannerIcon) this.elements.modeBannerIcon.textContent = '👁️';
+                if (this.elements.modeBannerText) {
+                    this.elements.modeBannerText.innerHTML = '<strong>Viewer Mode:</strong> Exploring the blockchain in read-only mode. Sign in as <strong>Admin</strong> to forge blocks, simulate attacks, or edit network state.';
+                }
+                if (this.elements.btnBannerSwitchAdmin) this.elements.btnBannerSwitchAdmin.classList.remove('hidden');
+            }
+        }
+
+        // Toolbar Propose/Forge Block Button
+        if (this.elements.btnMineBlock) {
+            if (isAdmin) {
+                this.elements.btnMineBlock.removeAttribute('disabled');
+                this.elements.btnMineBlock.title = 'Forge a new block via PoS lottery';
+            } else {
+                this.elements.btnMineBlock.setAttribute('disabled', 'true');
+                this.elements.btnMineBlock.title = 'Admin privileges required to forge blocks';
+            }
+        }
+
+        // Validator form gating
+        if (this.elements.formAddValidator) {
+            const submitBtn = this.elements.formAddValidator.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                if (isAdmin) {
+                    submitBtn.removeAttribute('disabled');
+                    submitBtn.textContent = 'Register Validator';
+                } else {
+                    submitBtn.setAttribute('disabled', 'true');
+                    submitBtn.textContent = 'Admin Required to Add Validator';
+                }
+            }
+        }
+
+        // Update drawer permissions if open
+        this._updateDrawerPermissions(isAdmin);
+    }
+
+    _updateDrawerPermissions(isAdmin) {
+        if (this.elements.drawerViewerNotice) {
+            if (isAdmin) {
+                this.elements.drawerViewerNotice.classList.add('hidden');
+            } else {
+                this.elements.drawerViewerNotice.classList.remove('hidden');
+            }
+        }
+        if (this.elements.btnTamperBlock) {
+            if (isAdmin) {
+                this.elements.btnTamperBlock.removeAttribute('disabled');
+            } else {
+                this.elements.btnTamperBlock.setAttribute('disabled', 'true');
+            }
+        }
+        if (this.elements.btnRemineBlock) {
+            if (isAdmin) {
+                this.elements.btnRemineBlock.removeAttribute('disabled');
+            } else {
+                this.elements.btnRemineBlock.setAttribute('disabled', 'true');
+            }
+        }
+        if (this.elements.inspDataInput) {
+            this.elements.inspDataInput.readOnly = !isAdmin;
         }
     }
 
@@ -128,6 +382,10 @@ class UiManager {
         const timeVal = block.validation_time !== undefined ? block.validation_time : (block.mining_time || 0.0);
         this.elements.inspTime.textContent = `${Number(timeVal).toFixed(4)}s`;
         this.elements.inspDataInput.value = block.data || '';
+
+        // Role-based drawer control
+        const isAdmin = typeof auth !== 'undefined' && auth && auth.isAdmin();
+        this._updateDrawerPermissions(isAdmin);
 
         // Hide or show tamper alert
         const isBrokenHere = !validationResult.is_valid && validationResult.broken_at_index === index;
@@ -212,6 +470,7 @@ class UiManager {
         }
 
         const totalStake = valList.reduce((acc, v) => acc + (v.is_slashed ? 0 : (Number(v.stake) || 0)), 0);
+        const isAdmin = typeof auth !== 'undefined' && auth && auth.isAdmin();
 
         valList.forEach(v => {
             const stakeNum = Number(v.stake) || 0;
@@ -225,7 +484,7 @@ class UiManager {
                     ${v.is_slashed ? '<span style="color:var(--accent-rose);">(SLASHED)</span>' : ''}
                 </div>
                 <div>Stake: <strong>${stakeNum}</strong> (${prob}%)</div>
-                ${!v.is_slashed ? `<button class="btn btn-danger btn-slash" data-name="${safeName}" style="padding:4px 8px; font-size:11px;">Slash</button>` : ''}
+                ${isAdmin && !v.is_slashed ? `<button class="btn btn-danger btn-slash" data-name="${safeName}" style="padding:4px 8px; font-size:11px;">Slash</button>` : ''}
             `;
             list.appendChild(div);
         });

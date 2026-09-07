@@ -573,3 +573,68 @@ textarea:focus {
 .hidden {
     display: none !important;
 }
+
+/* ==========================================================================
+   ROLE-BASED ACCESS CONTROL & AUTHENTICATION STYLES
+   ========================================================================== */
+
+.badge-viewer {
+    background: rgba(79, 172, 254, 0.12);
+    border: 1px solid rgba(79, 172, 254, 0.4);
+    color: #4facfe;
+}
+
+.badge-viewer .badge-dot {
+    background: #4facfe;
+    box-shadow: 0 0 8px #4facfe;
+}
+
+.badge-admin {
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    color: #f59e0b;
+}
+
+.badge-admin .badge-dot {
+    background: #f59e0b;
+    box-shadow: 0 0 8px #f59e0b;
+}
+
+.user-auth-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.user-auth-panel label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.mode-banner {
+    display: flex;
+    align-items: center;
+    padding: 8px 24px;
+    font-size: 12px;
+    border-bottom: 1px solid var(--border-glass);
+    z-index: 10;
+}
+
+.viewer-banner {
+    background: rgba(79, 172, 254, 0.08);
+    color: #93c5fd;
+}
+
+.admin-banner {
+    background: rgba(245, 158, 11, 0.08);
+    color: #fde68a;
+}
+
+.btn:disabled, .btn[disabled] {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
