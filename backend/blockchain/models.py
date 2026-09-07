@@ -71,10 +71,9 @@ class Block:
     data: str = ""
     transactions: List[Transaction] = field(default_factory=list)
     merkle_root: str = ""
-    nonce: int = 0
-    validator: Optional[str] = None
+    validator: str = "System"
     hash: str = ""
-    mining_time: float = 0.0
+    validation_time: float = 0.0
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert block instance to dictionary for API responses and hashing."""
@@ -85,10 +84,9 @@ class Block:
             "data": self.data,
             "transactions": [tx.to_dict() for tx in self.transactions],
             "merkle_root": self.merkle_root,
-            "nonce": self.nonce,
             "validator": self.validator or "",
             "hash": self.hash,
-            "mining_time": round(float(self.mining_time), 4)
+            "validation_time": round(float(self.validation_time), 4)
         }
 
     @classmethod
@@ -101,10 +99,9 @@ class Block:
             data=str(data.get("data", "")),
             transactions=txs,
             merkle_root=str(data.get("merkle_root", "")),
-            nonce=int(data.get("nonce", 0)),
-            validator=data.get("validator"),
+            validator=data.get("validator", "System"),
             hash=str(data.get("hash", "")),
-            mining_time=float(data.get("mining_time", 0.0))
+            validation_time=float(data.get("validation_time", data.get("mining_time", 0.0)))
         )
 
 

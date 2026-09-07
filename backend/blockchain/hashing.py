@@ -72,7 +72,6 @@ def calculate_block_hash(block: Block) -> str:
         "previous_hash": str(block.previous_hash),
         "data": str(block.data),
         "merkle_root": str(merkle_root),
-        "nonce": int(block.nonce),
         "validator": str(block.validator or "")
     }
 

@@ -1,6 +1,6 @@
 """
-Flask Web REST API and WebSockets server for the Blockchain Engine.
-Exposes control endpoints for mining, tampering, re-mining, consensus mode switching,
+Flask Web REST API and WebSockets server for the Proof of Stake (PoS) Blockchain Engine.
+Exposes control endpoints for block proposing, tampering, re-sealing,
 mempool management, and validator registry manipulation.
 """
 
@@ -20,8 +20,8 @@ app.config['SECRET_KEY'] = 'blockchain_sim_secret_key_2026'
 CORS(app, resources={r"/*": {"origins": "*"}})
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Global singleton Blockchain instance
-blockchain_engine = Blockchain(consensus_mode="pow", difficulty=3)
+# Global singleton Blockchain instance (Pure Proof of Stake)
+blockchain_engine = Blockchain()
 
 
 @app.route('/api/chain', methods=['GET'])
@@ -34,25 +34,17 @@ def get_chain():
 
 
 @app.route('/api/mine', methods=['POST'])
-def mine_block():
-    """Mine or select a new block."""
+@app.route('/api/forge', methods=['POST'])
+def forge_block():
+    """Propose and seal a new block using Proof of Stake validator selection."""
     req = request.get_json() or {}
     data_payload = req.get("data", "")
     validator_name = req.get("validator", None)
 
-    def on_mining_progress(index: int, nonce: int, current_hash: str):
-        # Emit WebSocket progress every 5000 iterations
-        socketio.emit('mining_progress', {
-            "index": index,
-            "nonce": nonce,
-            "hash": current_hash
-        })
-
     try:
         new_block = blockchain_engine.add_block(
             data=data_payload,
-            validator_name=validator_name,
-            progress_callback=on_mining_progress
+            validator_name=validator_name
         )
         response_payload = {
             "success": True,
@@ -69,7 +61,7 @@ def mine_block():
 
 @app.route('/api/tamper/<int:index>', methods=['POST'])
 def tamper_block(index: int):
-    """Simulate cyber attack on a block's data payload without re-mining."""
+    """Simulate cyber attack on a block's data payload without re-sealing."""
     req = request.get_json() or {}
     new_data = req.get("data", "TAMPERED DATA PAYLOAD")
 
@@ -92,26 +84,25 @@ def tamper_block(index: int):
         return jsonify({"success": False, "error": str(e)}), 400
 
 
+@app.route('/api/reseal/<int:index>', methods=['POST'])
 @app.route('/api/remine/<int:index>', methods=['POST'])
-def remine_block(index: int):
-    """Re-mine or re-seal a specific single block."""
-    def on_mining_progress(idx: int, nonce: int, current_hash: str):
-        socketio.emit('mining_progress', {
-            "index": idx,
-            "nonce": nonce,
-            "hash": current_hash
-        })
+def reseal_block(index: int):
+    """Re-seal a specific single block using PoS."""
+    req = request.get_json() or {}
+    validator_name = req.get("validator", None)
 
     try:
-        remined_block = blockchain_engine.remine_block(index=index, progress_callback=on_mining_progress)
+        resealed_block = blockchain_engine.reseal_block(index=index, validator_name=validator_name)
         validation = blockchain_engine.is_chain_valid()
         response_payload = {
             "success": True,
             "remined_index": index,
-            "block": remined_block.to_dict(),
+            "resealed_index": index,
+            "block": resealed_block.to_dict(),
             "validation": validation.to_dict(),
             "chain_state": blockchain_engine.to_dict()
         }
+        socketio.emit('block_resealed', response_payload)
         socketio.emit('block_remined', response_payload)
         return jsonify(response_payload), 200
 
@@ -131,29 +122,14 @@ def validate_chain():
     })
 
 
-@app.route('/api/consensus', methods=['POST'])
-def set_consensus():
-    """Swap consensus mode (pow / pos) or update PoW difficulty."""
-    req = request.get_json() or {}
-    mode = req.get("mode", blockchain_engine.consensus_mode)
-    difficulty = req.get("difficulty", None)
-
-    try:
-        if difficulty is not None:
-            difficulty = int(difficulty)
-        blockchain_engine.set_consensus_mode(mode=mode, difficulty=difficulty)
-        
-        response_payload = {
-            "success": True,
-            "consensus_mode": blockchain_engine.consensus_mode,
-            "pow_difficulty": blockchain_engine.pow_strategy.difficulty,
-            "chain_state": blockchain_engine.to_dict()
-        }
-        socketio.emit('consensus_updated', response_payload)
-        return jsonify(response_payload), 200
-
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
+@app.route('/api/consensus', methods=['GET', 'POST'])
+def get_consensus():
+    """Return current consensus configuration (Proof of Stake)."""
+    return jsonify({
+        "success": True,
+        "consensus_mode": "pos",
+        "chain_state": blockchain_engine.to_dict()
+    }), 200
 
 
 @app.route('/api/mempool', methods=['GET', 'POST'])

@@ -1,6 +1,6 @@
 """
 Mempool transaction manager for the Blockchain Engine.
-Holds unconfirmed pending transactions prior to block mining/packaging.
+Holds unconfirmed pending transactions prior to block proposing/packaging.
 """
 
 from typing import List, Dict, Any
