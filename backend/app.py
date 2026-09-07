@@ -16,8 +16,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from backend.blockchain import Blockchain, Transaction
 
+public_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "public"))
 frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend"))
-app = Flask(__name__, static_folder=frontend_dir, static_url_path="")
+static_dir = public_dir if os.path.exists(public_dir) else frontend_dir
+
+app = Flask(__name__, static_folder=static_dir, static_url_path="")
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'blockchain_sim_secret_key_2026')
 CORS(app, resources={r"/*": {"origins": "*"}})
 socketio = SocketIO(app, cors_allowed_origins="*")
@@ -33,6 +36,7 @@ def index():
 
 
 @app.route('/api/health', methods=['GET'])
+@app.route('/health', methods=['GET'])
 def health_check():
     """Return health status of the blockchain simulation server."""
     return jsonify({
@@ -43,6 +47,7 @@ def health_check():
 
 
 @app.route('/api/chain', methods=['GET'])
+@app.route('/chain', methods=['GET'])
 def get_chain():
     """Return full blockchain state, blocks, validation status, and configuration."""
     return jsonify({
@@ -53,6 +58,8 @@ def get_chain():
 
 @app.route('/api/mine', methods=['POST'])
 @app.route('/api/forge', methods=['POST'])
+@app.route('/mine', methods=['POST'])
+@app.route('/forge', methods=['POST'])
 def forge_block():
     """Propose and seal a new block using Proof of Stake validator selection."""
     req = request.get_json(silent=True) or {}
@@ -80,6 +87,7 @@ def forge_block():
 
 
 @app.route('/api/tamper/<int:index>', methods=['POST'])
+@app.route('/tamper/<int:index>', methods=['POST'])
 def tamper_block(index: int):
     """Simulate cyber attack on a block's data payload without re-sealing."""
     req = request.get_json(silent=True) or {}
@@ -106,6 +114,8 @@ def tamper_block(index: int):
 
 @app.route('/api/reseal/<int:index>', methods=['POST'])
 @app.route('/api/remine/<int:index>', methods=['POST'])
+@app.route('/reseal/<int:index>', methods=['POST'])
+@app.route('/remine/<int:index>', methods=['POST'])
 def reseal_block(index: int):
     """Re-seal a specific single block using PoS."""
     req = request.get_json(silent=True) or {}
@@ -135,6 +145,7 @@ def reseal_block(index: int):
 
 
 @app.route('/api/validate', methods=['GET'])
+@app.route('/validate', methods=['GET'])
 def validate_chain():
     """Return chain validation status report."""
     validation = blockchain_engine.is_chain_valid()
@@ -145,6 +156,7 @@ def validate_chain():
 
 
 @app.route('/api/consensus', methods=['GET', 'POST'])
+@app.route('/consensus', methods=['GET', 'POST'])
 def get_consensus():
     """Return current consensus configuration (Proof of Stake)."""
     return jsonify({
@@ -155,6 +167,7 @@ def get_consensus():
 
 
 @app.route('/api/mempool', methods=['GET', 'POST'])
+@app.route('/mempool', methods=['GET', 'POST'])
 def handle_mempool():
     """Get pending mempool transactions or submit a new transaction."""
     if request.method == 'GET':
@@ -200,6 +213,7 @@ def handle_mempool():
 
 
 @app.route('/api/validators', methods=['GET', 'POST'])
+@app.route('/validators', methods=['GET', 'POST'])
 def handle_validators():
     """Manage PoS validator registry."""
     if request.method == 'GET':

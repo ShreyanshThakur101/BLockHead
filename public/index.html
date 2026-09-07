@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blockchain & Consensus 2D VISUALIZATION </title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <!-- Socket.IO Client CDN -->
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body>
+    <!-- App Container -->
+    <div id="app-container">
+        
+        <!-- Header Navbar -->
+        <header id="navbar">
+            <div class="brand">
+                <div class="logo-icon">⛓️</div>
+                <div class="brand-text">
+                    <h1>BLOCKCHAIN <span>2D VISUALIZATION</span></h1>
+                    <p>Proof of Stake (PoS) Consensus Engine & Visualizer</p>
+                </div>
+            </div>
+
+            <div class="nav-controls">
+                <!-- PoS Consensus Model Badge -->
+                <div class="control-group">
+                    <label>Consensus Model</label>
+                    <div class="pos-badge-indicator">
+                        <span>🎲 Proof of Stake (PoS)</span>
+                    </div>
+                </div>
+
+                <!-- Chain Integrity Health Badge -->
+                <div class="health-badge-container">
+                    <label>Chain Health</label>
+                    <div id="health-badge" class="badge badge-valid">
+                        <span class="badge-dot"></span>
+                        <span id="health-badge-text">100% VALID</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Secondary Toolbar -->
+        <section id="toolbar">
+            <!-- PoS Controls -->
+            <div id="pos-controls" class="tool-section">
+                <button id="btn-manage-validators" class="btn btn-secondary">👥 Manage Validators (<span id="validator-count">3</span>)</button>
+            </div>
+
+            <!-- Actions -->
+            <div class="action-buttons">
+                <button id="btn-open-mempool" class="btn btn-secondary">📥 Mempool (<span id="mempool-count">0</span>)</button>
+                <button id="btn-mine-block" class="btn btn-primary">⚡ Forge / Propose Block</button>
+                <button id="btn-validate-chain" class="btn btn-outline">🔍 Re-Validate Chain</button>
+                <button id="btn-reset-view" class="btn btn-icon" title="Reset Canvas View">🎯</button>
+            </div>
+        </section>
+
+        <!-- Main Workspace (Canvas 2D Stage) -->
+        <main id="stage-wrapper">
+            <!-- Canvas Element -->
+            <canvas id="blockchain-canvas"></canvas>
+
+            <!-- Overlay Canvas Hint -->
+            <div class="stage-overlay-hint">
+                <span>💡 Click & Drag to Pan | Scroll to Zoom | Click Block to Inspect & Tamper</span>
+            </div>
+
+            <!-- PoS Selection Loader Overlay -->
+            <div id="mining-overlay" class="overlay-modal hidden">
+                <div class="loader-card">
+                    <div class="spinner"></div>
+                    <h3 id="mining-status-title">Selecting Validator via PoS Lottery...</h3>
+                    <p id="mining-status-subtitle">Weighted random lottery based on active validator stake</p>
+                    <div class="mining-metrics">
+                        <div>Status: <span id="pos-status-val">Selecting validator...</span></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Drawer: Block Inspector & Tamper Controls -->
+        <aside id="inspector-drawer" class="drawer hidden">
+            <div class="drawer-header">
+                <h3 id="inspector-title">Block #0 Inspector</h3>
+                <button id="btn-close-inspector" class="btn-close">&times;</button>
+            </div>
+            <div class="drawer-content">
+                <div class="info-group">
+                    <label>Block Hash</label>
+                    <div id="insp-hash" class="code-box">0000...</div>
+                </div>
+                <div class="info-group">
+                    <label>Previous Block Hash</label>
+                    <div id="insp-prev-hash" class="code-box">0000...</div>
+                </div>
+                <div class="info-row">
+                    <div>
+                        <label>Validator</label>
+                        <div id="insp-validator" class="val-box">System</div>
+                    </div>
+                    <div>
+                        <label>Validation Time</label>
+                        <div id="insp-time" class="val-box">0.00s</div>
+                    </div>
+                </div>
+
+                <hr class="divider">
+
+                <!-- Payload / Data Editing section for Tampering -->
+                <div class="info-group">
+                    <label for="insp-data-input">Data Payload (Editable for Tamper Attack)</label>
+                    <textarea id="insp-data-input" rows="4" placeholder="Enter block payload..."></textarea>
+                </div>
+
+                <div class="drawer-actions">
+                    <button id="btn-tamper-block" class="btn btn-danger">⚡ Tamper Block Data (Attack)</button>
+                    <button id="btn-remine-block" class="btn btn-warning">🔨 Re-seal / Repair Block</button>
+                </div>
+
+                <div id="tamper-alert-box" class="alert-box hidden">
+                    <strong>Chain Break Alert!</strong>
+                    <p id="tamper-alert-text">This block has been modified without re-sealing.</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Modal: Mempool & Create Transaction -->
+        <div id="mempool-modal" class="modal-backdrop hidden">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <h3>Pending Mempool Transactions</h3>
+                    <button id="btn-close-mempool" class="btn-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <!-- Create Tx Form -->
+                    <form id="form-create-tx" class="tx-form">
+                        <h4>Create New Transaction</h4>
+                        <div class="form-row">
+                            <input type="text" id="tx-sender" placeholder="Sender (e.g. Alice)" required>
+                            <input type="text" id="tx-recipient" placeholder="Recipient (e.g. Bob)" required>
+                            <input type="number" id="tx-amount" placeholder="Amount" step="0.1" min="0.1" required>
+                            <button type="submit" class="btn btn-primary">+ Add Tx</button>
+                        </div>
+                    </form>
+
+                    <hr class="divider">
+
+                    <!-- Tx Queue List -->
+                    <h4>Queue (<span id="mempool-queue-count">0</span> transactions)</h4>
+                    <div id="mempool-list" class="tx-list">
+                        <div class="empty-msg">No pending transactions in mempool.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: Validator Management (PoS) -->
+        <div id="validators-modal" class="modal-backdrop hidden">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <h3>Proof of Stake Validator Pool</h3>
+                    <button id="btn-close-validators" class="btn-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="form-add-validator" class="tx-form">
+                        <h4>Register New Validator</h4>
+                        <div class="form-row">
+                            <input type="text" id="val-name" placeholder="Validator Name" required>
+                            <input type="number" id="val-stake" placeholder="Initial Stake" step="5" min="1" required>
+                            <button type="submit" class="btn btn-primary">+ Add Validator</button>
+                        </div>
+                    </form>
+
+                    <hr class="divider">
+
+                    <h4>Active Validators</h4>
+                    <div id="validators-list" class="validator-list">
+                        <!-- Rendered dynamically -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- JavaScript Scripts -->
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/canvas.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
