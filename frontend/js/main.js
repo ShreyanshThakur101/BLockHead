@@ -33,7 +33,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             }
         } catch (err) {
-            console.error('Failed to sync chain state:', err);
+            console.error('Failed to sync chain state (server offline?):', err);
+            ui.setServerOfflineUI();
         }
     }
 
@@ -95,7 +96,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             await api.forgeBlock();
         } catch (err) {
             ui.hideMiningLoader();
-            alert(`PoS Block Proposal Error: ${err.message}`);
+            if (err.message && err.message.includes('Failed to fetch')) {
+                alert(`Backend Server Offline: Cannot connect to ${CONFIG.API_BASE_URL}.\n\nPlease ensure the Python backend server is running in your terminal:\n  python backend/app.py`);
+            } else {
+                alert(`PoS Block Proposal Error: ${err.message}`);
+            }
         }
     });
 

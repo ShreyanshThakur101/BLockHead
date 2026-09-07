@@ -4,7 +4,7 @@ Exposes control endpoints for block proposing, tampering, re-sealing,
 mempool management, and validator registry manipulation.
 """
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 import sys
@@ -15,13 +15,20 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from backend.blockchain import Blockchain, Transaction
 
-app = Flask(__name__)
+frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend"))
+app = Flask(__name__, static_folder=frontend_dir, static_url_path="")
 app.config['SECRET_KEY'] = 'blockchain_sim_secret_key_2026'
 CORS(app, resources={r"/*": {"origins": "*"}})
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Global singleton Blockchain instance (Pure Proof of Stake)
 blockchain_engine = Blockchain()
+
+
+@app.route('/')
+def index():
+    """Serve the 2D visualizer web frontend."""
+    return send_from_directory(app.static_folder, 'index.html')
 
 
 @app.route('/api/chain', methods=['GET'])

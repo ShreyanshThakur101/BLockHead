@@ -85,6 +85,13 @@ class UiManager {
         }
     }
 
+    setServerOfflineUI() {
+        const el = this.elements.healthBadge;
+        const txt = this.elements.healthBadgeText;
+        el.className = 'badge badge-tampered';
+        txt.textContent = 'SERVER OFFLINE';
+    }
+
     openInspector(block, index, validationResult) {
         this.selectedBlock = block;
         this.selectedBlockIndex = index;

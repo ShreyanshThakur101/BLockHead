@@ -2,9 +2,12 @@
    CONFIG CONSTANTS & CONSTANTS DEFAULTS
    ========================================================================== */
 
+const isHttp = typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin.startsWith('http');
+const defaultBaseUrl = isHttp ? window.location.origin : 'http://127.0.0.1:5000';
+
 const CONFIG = {
-    API_BASE_URL: 'http://127.0.0.1:5000/api',
-    SOCKET_URL: 'http://127.0.0.1:5000',
+    API_BASE_URL: `${defaultBaseUrl}/api`,
+    SOCKET_URL: defaultBaseUrl,
     
     // Canvas Card Dimensions & Rendering Options
     CANVAS: {
